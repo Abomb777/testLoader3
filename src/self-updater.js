@@ -1,5 +1,6 @@
 const fs = require('fs');
 const { exec, spawn } = require('child_process');
+const os = require('os');
 const path = require('path');
 
 const pkg = require(path.join(process.cwd(), 'package.json'));
@@ -66,18 +67,50 @@ function restartApp(runtime) {
       else log(`🛠️  Touched ${FILE} for nodemon`);
     });
   } else {
-    log('🚀 Spawning new node process...');
-/*
-    const child = spawn('node', [FILE], {
-      detached: true,
-      stdio: ['ignore', 'inherit', 'inherit'] // stdout and stderr go to parent
-    });
-*/
+    const isWindows = os.platform() === 'win32';
+    const nodePath = process.execPath;
+    const appPath = path.resolve(FILE);
 
-const child = spawn(process.execPath, [FILE], {
-  detached: true,
-  stdio: ['ignore', process.stdout, process.stderr] // inherit output
-});
+    if (isWindows) {
+      log(`🚀 Spawning new node process (Windows mode)...`);
+      spawn('cmd', ['/c', 'start', '""', `"${nodePath}"`, appPath], {
+        cwd: process.cwd(),
+        detached: true,
+        stdio: 'ignore',
+        shell: true
+      }).unref();
+    } else {
+      log(`🚀 Spawning new node process (Unix-like mode)...`);
+      spawn(nodePath, [appPath], {
+        detached: true,
+        stdio: ['ignore', 'inherit', 'inherit']
+      }).unref();
+    }
+
+    log('🧨 Exiting old process');
+    process.exit(0);
+  }
+}
+
+/*
+function restartApp(runtime) {
+  if (runtime === 'pm2') {
+    exec(`pm2 restart ${PM2_NAME}`, (err) => {
+      if (err) log('❌ PM2 restart failed:', err.message);
+      else log('🔁 Restarted with PM2');
+    });
+  } else if (runtime === 'nodemon') {
+    exec(`touch ${FILE}`, (err) => {
+      if (err) log('❌ Touch failed:', err.message);
+      else log(`🛠️  Touched ${FILE} for nodemon`);
+    });
+  } else {
+    log('🚀 Spawning new node process...');
+
+	const child = spawn(process.execPath, [FILE], {
+	  detached: true,
+	  stdio: ['ignore', process.stdout, process.stderr] // inherit output
+	});
 
     child.on('error', (err) => {
       log('❌ Failed to spawn new process:', err.message);
@@ -88,7 +121,7 @@ const child = spawn(process.execPath, [FILE], {
     process.exit(0);
   }
 }
-
+*/
 
 function isAppHealthy() {
   if (!fs.existsSync(HEALTH_FILE)) return false;

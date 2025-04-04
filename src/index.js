@@ -9,3 +9,6 @@ async function running(){
 })();
 
 setInterval(running,2000);
+
+// ✅ This line keeps the process from exiting
+process.stdin.resume();
