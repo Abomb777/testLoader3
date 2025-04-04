@@ -70,7 +70,7 @@ function restartApp(runtime) {
     const isWindows = os.platform() === 'win32';
     const nodePath = process.execPath;
     const appPath = path.resolve(FILE);
-
+/*
     if (isWindows) {
       log(`🚀 Spawning new node process (Windows mode)...`);
       spawn('cmd', ['/c', 'start', '""', `"${nodePath}"`, appPath], {
@@ -79,7 +79,24 @@ function restartApp(runtime) {
         stdio: 'ignore',
         shell: true
       }).unref();
-    } else {
+    } 
+	*/
+	if (isWindows) {
+	  log(`🚀 Spawning new node process (Windows mode with logging)...`);
+
+	  const out = fs.openSync('./out.log', 'a');
+	  const err = fs.openSync('./err.log', 'a');
+
+	  const child = spawn(process.execPath, [appPath], {
+		detached: true,
+		stdio: ['ignore', out, err]
+	  });
+
+	  child.unref();
+
+	  log('🧨 Exiting old process');
+	  process.exit(0);
+	}else {
       log(`🚀 Spawning new node process (Unix-like mode)...`);
       spawn(nodePath, [appPath], {
         detached: true,
