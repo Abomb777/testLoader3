@@ -67,11 +67,17 @@ function restartApp(runtime) {
     });
   } else {
     log('🚀 Spawning new node process...');
-
+/*
     const child = spawn('node', [FILE], {
       detached: true,
       stdio: ['ignore', 'inherit', 'inherit'] // stdout and stderr go to parent
     });
+*/
+
+const child = spawn(process.execPath, [FILE], {
+  detached: true,
+  stdio: ['ignore', process.stdout, process.stderr] // inherit output
+});
 
     child.on('error', (err) => {
       log('❌ Failed to spawn new process:', err.message);
