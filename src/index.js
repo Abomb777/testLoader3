@@ -1,8 +1,8 @@
 require('./self-updater');
-
+const pa = require('../package.json');
 
 async function running(){
-	console.log(".");
+	console.log(". "+pa.version);
 }
 (async ()=>{
 	
