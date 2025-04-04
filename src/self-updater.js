@@ -1,11 +1,10 @@
 const fs = require('fs');
-const { exec } = require('child_process');
+const { exec, spawn } = require('child_process');
 const path = require('path');
 
 const pkg = require(path.join(process.cwd(), 'package.json'));
 const config = pkg.selfUpdater || {};
 
-const TYPE = config.type || 'pm2';
 const BRANCH = config.watchBranch || 'main';
 const INTERVAL = config.checkInterval || 10000;
 const FILE = config.mainFile || 'app.js';
@@ -14,10 +13,16 @@ const HEALTH_FILE = path.join(process.cwd(), config.healthFile || '.alive');
 
 let lastCommit = '';
 let backupCommit = '';
-const FAIL_TIMEOUT = 20000; // 20 seconds
+const FAIL_TIMEOUT = 20000;
 
 function log(...args) {
   console.log(`[Updater]`, ...args);
+}
+
+function detectRuntime() {
+  if (process.env.PM2_HOME || process.env.pm_id !== undefined) return 'pm2';
+  if ((process.env._ || '').includes('nodemon')) return 'nodemon';
+  return 'node';
 }
 
 function getCommitHash(cb) {
@@ -41,70 +46,78 @@ function gitPull(cb) {
 }
 
 function gitReset(commit, cb) {
-  exec(`git reset --hard ${commit}`, (err, stdout) => {
+  exec(`git reset --hard ${commit}`, (err) => {
     if (err) return cb(false);
-    log('🔙 Rolled back to previous commit:', commit);
+    log('🔙 Rolled back to:', commit);
     cb(true);
   });
 }
 
-function restartApp() {
-  if (TYPE === 'pm2') {
-    exec(`pm2 restart ${PM2_NAME}`, (err, stdout) => {
-      if (err) return log('❌ PM2 restart failed:', err.message);
-      log('🔁 PM2 restarted:', PM2_NAME);
+function restartApp(runtime) {
+  if (runtime === 'pm2') {
+    exec(`pm2 restart ${PM2_NAME}`, (err) => {
+      if (err) log('❌ PM2 restart failed:', err.message);
+      else log('🔁 Restarted with PM2');
     });
-  } else if (TYPE === 'nodemon') {
+  } else if (runtime === 'nodemon') {
     exec(`touch ${FILE}`, (err) => {
-      if (err) return log('❌ Could not touch file:', err.message);
-      log(`🛠️  Touched ${FILE} to trigger nodemon restart`);
+      if (err) log('❌ Touch failed:', err.message);
+      else log(`🛠️  Touched ${FILE} for nodemon`);
     });
+  } else {
+    log('🚀 Spawning new node process');
+    const child = spawn('node', [FILE], {
+      detached: true,
+      stdio: 'ignore'
+    });
+    child.unref();
+    process.exit(0);
   }
 }
 
 function isAppHealthy() {
   if (!fs.existsSync(HEALTH_FILE)) return false;
-
   const lastPing = parseInt(fs.readFileSync(HEALTH_FILE, 'utf-8'));
   return (Date.now() - lastPing) < FAIL_TIMEOUT;
 }
 
-function checkAppAfterUpdate(newCommit) {
+function checkAppAfterUpdate(runtime, newCommit) {
   log('🧪 Waiting for health check...');
   setTimeout(() => {
     if (!isAppHealthy()) {
-      log('❌ App failed health check, rolling back...');
-      gitReset(backupCommit, () => {
-        restartApp();
-      });
+      log('❌ Health check failed. Rolling back...');
+      gitReset(backupCommit, () => restartApp(runtime));
     } else {
-      log('✅ App is healthy. Running commit:', newCommit);
+      log('✅ App healthy with new commit:', newCommit);
       lastCommit = newCommit;
     }
   }, FAIL_TIMEOUT);
 }
 
-function checkForUpdate() {
+function checkForUpdate(runtime) {
   gitPull(success => {
     if (!success) return;
 
     getCommitHash(newHash => {
       if (newHash && newHash !== lastCommit) {
-        log(`📦 Update detected: ${lastCommit} → ${newHash}`);
+        log(`📦 Update: ${lastCommit} → ${newHash}`);
         backupCommit = lastCommit;
-        lastCommit = newHash;
-
-        restartApp();
-        checkAppAfterUpdate(newHash);
+        restartApp(runtime);
+        checkAppAfterUpdate(runtime, newHash);
       }
     });
   });
 }
 
-// Start watching
-getCommitHash(hash => {
-  lastCommit = hash;
-  backupCommit = hash;
-  log(`👀 Watching '${BRANCH}' for changes every ${INTERVAL / 1000}s [type=${TYPE}]...`);
-  setInterval(checkForUpdate, INTERVAL);
-});
+function startWatcher(runtime) {
+  getCommitHash(hash => {
+    lastCommit = hash;
+    backupCommit = hash;
+    log(`👀 Watching '${BRANCH}' every ${INTERVAL / 1000}s using ${runtime}...`);
+    setInterval(() => checkForUpdate(runtime), INTERVAL);
+  });
+}
+
+// 🚀 Init
+const runtime = detectRuntime();
+startWatcher(runtime);
