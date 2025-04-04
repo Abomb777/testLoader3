@@ -8,7 +8,7 @@ const config = pkg.selfUpdater || {};
 
 const BRANCH = config.watchBranch || 'main';
 const INTERVAL = config.checkInterval || 10000;
-const FILE = config.mainFile || pkg.name || 'app.js';
+const FILE = config.mainFile || pkg.main || 'index.js';
 const PM2_NAME = config.pm2Name || pkg.name;
 const HEALTH_FILE = path.join(process.cwd(), config.healthFile || '.alive');
 
