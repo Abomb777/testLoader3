@@ -69,12 +69,10 @@ function restartApp(runtime) {
     log('🚀 Spawning new node process');
     const child = spawn('node', [FILE], {
       detached: true,
-      stdio: 'inherit'
+      stdio: 'ignore'
     });
-    child.on('exit', code => {
-      log(`⚠️  App exited with code ${code}`);
-    });
-    // Do NOT exit here — keep updater alive
+    child.unref();
+    process.exit(0);
   }
 }
 
