@@ -49,6 +49,7 @@ function gitReset(commit, cb) {
   exec(`git reset --hard ${commit}`, (err) => {
     if (err) return cb(false);
     log('🔙 Rolled back to:', commit);
+    lastCommit = commit; // 🔁 prevent rollback loop
     cb(true);
   });
 }
@@ -99,12 +100,31 @@ function checkForUpdate(runtime) {
     if (!success) return;
 
     getCommitHash(newHash => {
-      if (newHash && newHash !== lastCommit) {
+      if (!newHash || newHash === lastCommit) return;
+
+      // Check if only self-updater.js changed
+      exec(`git diff --name-only ${lastCommit} ${newHash}`, (err, stdout) => {
+        if (err) {
+          log('❌ Failed diff check:', err.message);
+          return;
+        }
+
+        const changedFiles = stdout.trim().split('\n').filter(Boolean);
+        const onlySelfUpdated = changedFiles.every(f => f.includes('self-updater.js'));
+
+        if (onlySelfUpdated) {
+          log('⚠️ Only self-updater.js changed — skipping restart.');
+          lastCommit = newHash; // update to prevent looping
+          return;
+        }
+
         log(`📦 Update: ${lastCommit} → ${newHash}`);
         backupCommit = lastCommit;
+        lastCommit = newHash;
+
         restartApp(runtime);
         checkAppAfterUpdate(runtime, newHash);
-      }
+      });
     });
   });
 }
