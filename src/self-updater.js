@@ -66,15 +66,23 @@ function restartApp(runtime) {
       else log(`🛠️  Touched ${FILE} for nodemon`);
     });
   } else {
-    log('🚀 Spawning new node process');
+    log('🚀 Spawning new node process...');
+
     const child = spawn('node', [FILE], {
       detached: true,
-      stdio: 'ignore'
+      stdio: ['ignore', 'inherit', 'inherit'] // stdout and stderr go to parent
     });
-    child.unref();
+
+    child.on('error', (err) => {
+      log('❌ Failed to spawn new process:', err.message);
+    });
+
+    child.unref(); // Let it live independently
+    log('🧨 Exiting old process');
     process.exit(0);
   }
 }
+
 
 function isAppHealthy() {
   if (!fs.existsSync(HEALTH_FILE)) return false;
